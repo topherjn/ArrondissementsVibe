@@ -6,25 +6,47 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.ActivityResultLauncher
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.Preview
-import androidx.core.app.ActivityCompat
+import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
+import com.google.android.gms.location.FusedLocationProviderClient
+import com.google.android.gms.location.LocationServices
 import com.topherjn.arrondissementsvibe.ui.theme.ArrondissementsVibeTheme
 
-private const val LOCATION_PERMISSION_REQUEST_CODE = 123
-
 class MainActivity : ComponentActivity() {
+
+    private lateinit var fusedLocationClient: FusedLocationProviderClient
+    private lateinit var locationPermissionRequest: ActivityResultLauncher<String>
+    private val locationState = mutableStateOf<Pair<Double?, Double?>?>(null)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // Check for location permission
+        fusedLocationClient = LocationServices.getFusedLocationProviderClient(this)
+
+        locationPermissionRequest = registerForActivityResult(
+            ActivityResultContracts.RequestPermission()
+        ) { isGranted: Boolean ->
+            if (isGranted) {
+                getLocation()
+            } else {
+                locationState.value = Pair(null, null) // Indicate permission denied
+                println("Location permission denied.")
+                // Optionally, show a UI message.
+            }
+        }
+
         if (ContextCompat.checkSelfPermission(
                 this,
                 Manifest.permission.ACCESS_FINE_LOCATION
@@ -32,20 +54,15 @@ class MainActivity : ComponentActivity() {
         ) {
             getLocation()
         } else {
-            // Location permission is not granted, request it
-            ActivityCompat.requestPermissions(
-                this,
-                arrayOf(Manifest.permission.ACCESS_FINE_LOCATION),
-                LOCATION_PERMISSION_REQUEST_CODE
-            )
+            locationPermissionRequest.launch(Manifest.permission.ACCESS_FINE_LOCATION)
         }
 
         enableEdgeToEdge()
         setContent {
             ArrondissementsVibeTheme {
                 Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
-                    Greeting(
-                        name = "Android",
+                    LocationDisplay(
+                        location = locationState.value,
                         modifier = Modifier.padding(innerPadding)
                     )
                 }
@@ -53,50 +70,59 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    override fun onRequestPermissionsResult(
-        requestCode: Int,
-        permissions: Array<String>,
-        grantResults: IntArray
-    ) {
-        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
-        when (requestCode) {
-            LOCATION_PERMISSION_REQUEST_CODE -> {
-                if ((grantResults.isNotEmpty() &&
-                            grantResults[0] == PackageManager.PERMISSION_GRANTED)) {
-                    // Permission was granted, proceed with getting location
-                    getLocation()
-                } else {
-                    // Permission was denied, handle accordingly (e.g., show a message)
-                    // You might want to explain why the permission is needed.
-                }
-                return
-            }
-            else -> {
-                // Ignore all other requests.
-            }
-        }
-    }
-
     private fun getLocation() {
-        // This is where you'll add the code to get the device's location
-        // using FusedLocationProviderClient or other location services.
-        // For now, we'll leave it empty.
-        println("getLocation() called - will implement location retrieval later")
+        try {
+            fusedLocationClient.lastLocation
+                .addOnSuccessListener { location ->
+                    if (location != null) {
+                        locationState.value = Pair(location.latitude, location.longitude)
+                        println("Latitude: ${location.latitude}, Longitude: ${location.longitude}")
+                    } else {
+                        locationState.value = Pair(null, null)
+                        println("Last known location was null.")
+                    }
+                }
+                .addOnFailureListener { e ->
+                    locationState.value = Pair(null, null)
+                    println("Failed to get last location: ${e.localizedMessage}")
+                }
+        } catch (securityException: SecurityException) {
+            locationState.value = Pair(null, null)
+            println("Security exception while getting location: $securityException")
+        }
     }
 }
 
 @Composable
-fun Greeting(name: String, modifier: Modifier = Modifier) {
-    Text(
-        text = "Hello $name!",
+fun LocationDisplay(location: Pair<Double?, Double?>?, modifier: Modifier = Modifier) {
+    Column(
         modifier = modifier
-    )
+            .fillMaxSize()
+            .padding(16.dp)
+    ) {
+        Text(
+            text = "Location:",
+            style = MaterialTheme.typography.headlineMedium
+        )
+        if (location != null) {
+            val latitude = location.first
+            val longitude = location.second
+            if (latitude != null && longitude != null) {
+                Text(text = "Latitude: $latitude")
+                Text(text = "Longitude: $longitude")
+            } else {
+                Text(text = "Could not retrieve location.")
+            }
+        } else {
+            Text(text = "Waiting for location...")
+        }
+    }
 }
 
 @Preview(showBackground = true)
 @Composable
-fun GreetingPreview() {
+fun LocationDisplayPreview() {
     ArrondissementsVibeTheme {
-        Greeting("Android")
+        LocationDisplay(location = Pair(48.8566, 2.3522)) // Example Paris coordinates
     }
 }
