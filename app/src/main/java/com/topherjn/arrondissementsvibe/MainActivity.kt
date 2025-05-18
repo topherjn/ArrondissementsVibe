@@ -8,6 +8,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -19,6 +20,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -36,6 +38,7 @@ class MainActivity : ComponentActivity() {
     private lateinit var locationPermissionRequest: ActivityResultLauncher<String>
     private val locationState = mutableStateOf<Pair<Double?, Double?>?>(null)
     private var postalCodeState by mutableStateOf<String?>(null)
+    private var arrondissementState by mutableStateOf<Int?>(null) // New state for arrondissement
     private lateinit var geocodingService: GeocodingService
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -52,6 +55,7 @@ class MainActivity : ComponentActivity() {
             } else {
                 locationState.value = Pair(null, null)
                 postalCodeState = "Permission Denied"
+                arrondissementState = null // Reset arrondissement
                 println("Location permission denied.")
             }
         }
@@ -73,18 +77,22 @@ class MainActivity : ComponentActivity() {
                     LocationDisplay(
                         location = locationState.value,
                         postalCode = postalCodeState,
+                        arrondissement = arrondissementState, // Pass arrondissement state
                         modifier = Modifier.padding(innerPadding)
                     )
 
-                    // Moved getPostalCode logic here within a LaunchedEffect
                     val currentLocation = locationState.value
                     LaunchedEffect(currentLocation?.first, currentLocation?.second) {
                         if (currentLocation?.first != null && currentLocation.second != null) {
                             geocodingService.getAddressFromCoordinates(currentLocation.first!!, currentLocation.second!!)
                                 .collectLatest { address ->
                                     postalCodeState = address?.postalCode
-                                    println("Postal Code (from Flow): ${address?.postalCode}")
+                                    arrondissementState = address?.postalCode?.takeIf { it.startsWith("75") }?.takeLast(2)?.toIntOrNull() // Extract arrondissement
+                                    println("Postal Code (from Flow): ${address?.postalCode}, Arrondissement: $arrondissementState")
                                 }
+                        } else {
+                            postalCodeState = null
+                            arrondissementState = null
                         }
                     }
                 }
@@ -99,55 +107,78 @@ class MainActivity : ComponentActivity() {
                     if (location != null) {
                         locationState.value = Pair(location.latitude, location.longitude)
                         println("Latitude: ${location.latitude}, Longitude: ${location.longitude}")
-                        // The getPostalCode logic is now in setContent
+                        // The getPostalCode/arrondissement logic is now in setContent
                     } else {
                         locationState.value = Pair(null, null)
                         postalCodeState = "Location Unavailable"
+                        arrondissementState = null // Reset arrondissement
                         println("Last known location was null.")
                     }
                 }
                 .addOnFailureListener { e ->
                     locationState.value = Pair(null, null)
                     postalCodeState = "Location Error: ${e.localizedMessage}"
+                    arrondissementState = null // Reset arrondissement
                     println("Failed to get last location: ${e.localizedMessage}")
                 }
         } catch (securityException: SecurityException) {
             locationState.value = Pair(null, null)
             postalCodeState = "Security Exception"
+            arrondissementState = null // Reset arrondissement
             println("Security exception while getting location: $securityException")
         }
     }
 }
 
 @Composable
-fun LocationDisplay(location: Pair<Double?, Double?>?, postalCode: String?, modifier: Modifier = Modifier) {
+fun LocationDisplay(
+    location: Pair<Double?, Double?>?,
+    postalCode: String?,
+    arrondissement: Int?,
+    modifier: Modifier = Modifier
+) {
     Column(
         modifier = modifier
             .fillMaxSize()
-            .padding(16.dp)
+            .padding(16.dp),
+        horizontalAlignment = Alignment.CenterHorizontally, // Center items horizontally
+        verticalArrangement = Arrangement.Center // Center items vertically
     ) {
-        Text(
-            text = "Location:",
-            style = MaterialTheme.typography.headlineMedium
-        )
-        if (location != null) {
-            val latitude = location.first
-            val longitude = location.second
-            if (latitude != null && longitude != null) {
-                Text(text = "Latitude: $latitude")
-                Text(text = "Longitude: $longitude")
-            } else {
-                Text(text = "Could not retrieve location.")
+        if (arrondissement != null) {
+            Text(
+                text = "$arrondissement",
+                style = MaterialTheme.typography.displayLarge // Use a large typography style
+            )
+            Text(
+                text = "Arrondissement",
+                style = MaterialTheme.typography.headlineSmall
+            )
+            if (location != null) {
+                val latitude = location.first
+                val longitude = location.second
+                if (latitude != null && longitude != null) {
+                    Text(text = "Lat: $latitude, Lon: $longitude", style = MaterialTheme.typography.bodySmall)
+                }
+            }
+            if (postalCode != null) {
+                Text(text = "Postal Code: $postalCode", style = MaterialTheme.typography.bodySmall)
             }
         } else {
-            Text(text = "Waiting for location...")
+            Text(
+                text = "Locating...",
+                style = MaterialTheme.typography.headlineMedium
+            )
+            if (location != null) {
+                val latitude = location.first
+                val longitude = location.second
+                if (latitude != null && longitude != null) {
+                    Text(text = "Lat: $latitude, Lon: $longitude", style = MaterialTheme.typography.bodySmall)
+                }
+            }
+            if (postalCode != null) {
+                Text(text = "Postal Code: $postalCode", style = MaterialTheme.typography.bodySmall)
+            }
         }
-        Text(
-            text = "Postal Code:",
-            style = MaterialTheme.typography.headlineMedium,
-            modifier = Modifier.padding(top = 16.dp)
-        )
-        Text(text = postalCode ?: "Waiting for postal code...")
     }
 }
 
@@ -155,6 +186,6 @@ fun LocationDisplay(location: Pair<Double?, Double?>?, postalCode: String?, modi
 @Composable
 fun LocationDisplayPreview() {
     ArrondissementsVibeTheme {
-        LocationDisplay(location = Pair(48.8566, 2.3522), postalCode = "75001")
+        LocationDisplay(location = Pair(48.8566, 2.3522), postalCode = "75001", arrondissement = 1)
     }
 }
