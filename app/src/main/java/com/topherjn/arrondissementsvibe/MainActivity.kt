@@ -38,7 +38,7 @@ class MainActivity : ComponentActivity() {
     private lateinit var locationPermissionRequest: ActivityResultLauncher<String>
     private val locationState = mutableStateOf<Pair<Double?, Double?>?>(null)
     private var postalCodeState by mutableStateOf<String?>(null)
-    private var arrondissementState by mutableStateOf<Int?>(null) // New state for arrondissement
+    private var arrondissementState by mutableStateOf<Int?>(null)
     private lateinit var geocodingService: GeocodingService
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -84,11 +84,14 @@ class MainActivity : ComponentActivity() {
                     val currentLocation = locationState.value
                     LaunchedEffect(currentLocation?.first, currentLocation?.second) {
                         if (currentLocation?.first != null && currentLocation.second != null) {
-                            geocodingService.getAddressFromCoordinates(currentLocation.first!!, currentLocation.second!!)
+                            geocodingService.getAddressFromCoordinates(currentLocation.first!!,
+                                currentLocation.second!!)
                                 .collectLatest { address ->
                                     postalCodeState = address?.postalCode
-                                    arrondissementState = address?.postalCode?.takeIf { it.startsWith("75") }?.takeLast(2)?.toIntOrNull() // Extract arrondissement
-                                    println("Postal Code (from Flow): ${address?.postalCode}, Arrondissement: $arrondissementState")
+                                    arrondissementState = address?.postalCode?.takeIf {
+                                        it.startsWith("75") }?.takeLast(2)?.toIntOrNull()
+                                    println("Postal Code (from Flow): ${address?.postalCode}, " +
+                                            "Arrondissement: $arrondissementState")
                                 }
                         } else {
                             postalCodeState = null
@@ -157,11 +160,13 @@ fun LocationDisplay(
                 val latitude = location.first
                 val longitude = location.second
                 if (latitude != null && longitude != null) {
-                    Text(text = "Lat: $latitude, Lon: $longitude", style = MaterialTheme.typography.bodySmall)
+                    Text(text = "Lat: $latitude, Lon: $longitude",
+                        style = MaterialTheme.typography.bodySmall)
                 }
             }
             if (postalCode != null) {
-                Text(text = "Postal Code: $postalCode", style = MaterialTheme.typography.bodySmall)
+                Text(text = "Postal Code: $postalCode",
+                    style = MaterialTheme.typography.bodySmall)
             }
         } else {
             Text(
@@ -172,7 +177,8 @@ fun LocationDisplay(
                 val latitude = location.first
                 val longitude = location.second
                 if (latitude != null && longitude != null) {
-                    Text(text = "Lat: $latitude, Lon: $longitude", style = MaterialTheme.typography.bodySmall)
+                    Text(text = "Lat: $latitude, Lon: $longitude",
+                        style = MaterialTheme.typography.bodySmall)
                 }
             }
             if (postalCode != null) {
