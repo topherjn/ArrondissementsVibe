@@ -26,6 +26,9 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import com.google.android.gms.location.FusedLocationProviderClient
+import com.google.android.gms.location.LocationCallback
+import com.google.android.gms.location.LocationRequest
+import com.google.android.gms.location.LocationResult
 import com.google.android.gms.location.LocationServices
 import com.topherjn.arrondissementsvibe.location.BuiltinGeocoderService
 import com.topherjn.arrondissementsvibe.location.GeocodingService
@@ -107,28 +110,57 @@ class MainActivity : ComponentActivity() {
         try {
             fusedLocationClient.lastLocation
                 .addOnSuccessListener { location ->
-                    if (location != null) {
+                    // Check if location is recent enough (e.g., within 30 seconds) or not null
+                    val currentTime = System.currentTimeMillis()
+                    val locationAge = if (location != null) currentTime - location.time else Long.MAX_VALUE // Use Long.MAX_VALUE if location is null
+
+                    if (location != null && locationAge < 30000) { // If location is less than 30 seconds old
                         locationState.value = Pair(location.latitude, location.longitude)
-                        println("Latitude: ${location.latitude}, Longitude: ${location.longitude}")
-                        // The getPostalCode/arrondissement logic is now in setContent
+                        println("Using Last Known Location: Lat=${location.latitude}, Lon=${location.longitude}, Age=${locationAge/1000}s")
                     } else {
-                        locationState.value = Pair(null, null)
-                        postalCodeState = "Location Unavailable"
-                        arrondissementState = null // Reset arrondissement
-                        println("Last known location was null.")
+                        println("Last known location is null or stale, requesting current location.")
+                        requestCurrentLocationUpdates()
                     }
                 }
                 .addOnFailureListener { e ->
-                    locationState.value = Pair(null, null)
-                    postalCodeState = "Location Error: ${e.localizedMessage}"
-                    arrondissementState = null // Reset arrondissement
-                    println("Failed to get last location: ${e.localizedMessage}")
+                    println("Failed to get last known location: ${e.localizedMessage}, requesting current.")
+                    requestCurrentLocationUpdates()
                 }
         } catch (securityException: SecurityException) {
-            locationState.value = Pair(null, null)
-            postalCodeState = "Security Exception"
-            arrondissementState = null // Reset arrondissement
             println("Security exception while getting location: $securityException")
+            postalCodeState = "Security Exception" // Update state in case of exception
+            arrondissementState = null
+        }
+    }
+
+    private fun requestCurrentLocationUpdates() {
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
+            fusedLocationClient.requestLocationUpdates(locationRequest, locationCallback, null)
+            println("Requesting current location updates...")
+        } else {
+            println("Location permission not granted to request updates.")
+            locationState.value = Pair(null, null)
+            postalCodeState = "Permission Denied"
+            arrondissementState = null
+        }
+    }
+
+    // Inside MainActivity class, outside any function
+    private val locationRequest = LocationRequest.Builder(1000L) // Request updates every 1 second
+        .setPriority(LocationRequest.PRIORITY_HIGH_ACCURACY) // Prioritize high accuracy
+        .setWaitForAccurateLocation(false) // Don't wait too long for perfect accuracy
+        .setMinUpdateIntervalMillis(500L) // Minimum time between updates
+        .setMaxUpdateDelayMillis(2000L) // Maximum time between updates
+        .build()
+
+    private val locationCallback = object : LocationCallback() {
+        override fun onLocationResult(locationResult: LocationResult) {
+            locationResult.lastLocation?.let { location ->
+                locationState.value = Pair(location.latitude, location.longitude)
+                println("Fresh Location: Lat=${location.latitude}, Lon=${location.longitude}")
+                // Stop updates once we get a fresh location
+                fusedLocationClient.removeLocationUpdates(this)
+            }
         }
     }
 }
@@ -149,25 +181,13 @@ fun LocationDisplay(
     ) {
         if (arrondissement != null) {
             Text(
-                text = "$arrondissement",
-                style = MaterialTheme.typography.displayLarge // Use a large typography style
-            )
-            Text(
                 text = "Arrondissement",
                 style = MaterialTheme.typography.headlineSmall
             )
-            if (location != null) {
-                val latitude = location.first
-                val longitude = location.second
-                if (latitude != null && longitude != null) {
-                    Text(text = "Lat: $latitude, Lon: $longitude",
-                        style = MaterialTheme.typography.bodySmall)
-                }
-            }
-            if (postalCode != null) {
-                Text(text = "Postal Code: $postalCode",
-                    style = MaterialTheme.typography.bodySmall)
-            }
+            Text(
+                text = "$arrondissement",
+                style = MaterialTheme.typography.displayLarge
+            )
         } else {
             Text(
                 text = "Locating...",
