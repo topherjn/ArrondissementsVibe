@@ -210,7 +210,7 @@ fun LocationDisplay(
         } else {
             // Display error/status messages only when not loading
             Text(
-                text = "No Location - Refresh?",
+                text = "Not in Paris?",
                 style = MaterialTheme.typography.headlineMedium
             )
             if (location != null) {
