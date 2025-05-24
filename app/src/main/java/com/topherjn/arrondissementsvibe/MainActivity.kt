@@ -181,7 +181,7 @@ fun LocationDisplay(
     location: Pair<Double?, Double?>?,
     postalCode: String?,
     arrondissement: Int?,
-    isLoading: Boolean, // NEW: Accept loading state
+    isLoading: Boolean,
     onRefreshLocation: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -210,7 +210,7 @@ fun LocationDisplay(
         } else {
             // Display error/status messages only when not loading
             Text(
-                text = "Not in Paris?",
+                text = "No arrondissement found.\nNot in Paris?",
                 style = MaterialTheme.typography.headlineMedium
             )
             if (location != null) {
